@@ -6,10 +6,17 @@ interface HoldingScreenProps {
   threadType: string;
   threadNote: string;
   userName: string;
+  strokeIndex: number;
   onDismiss: () => void;
 }
 
-export default function HoldingScreen({ threadType, threadNote, userName, onDismiss }: HoldingScreenProps) {
+export default function HoldingScreen({
+  threadType,
+  threadNote,
+  userName,
+  strokeIndex,
+  onDismiss,
+}: HoldingScreenProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -17,7 +24,7 @@ export default function HoldingScreen({ threadType, threadNote, userName, onDism
     const dismissTimer = setTimeout(() => {
       setVisible(false);
       setTimeout(onDismiss, 500);
-    }, 5500);
+    }, 5000);
     return () => {
       cancelAnimationFrame(enter);
       clearTimeout(dismissTimer);
@@ -34,8 +41,7 @@ export default function HoldingScreen({ threadType, threadNote, userName, onDism
       role="presentation"
     >
       <div className="holding-screen-inner">
-        <VelaHeader strokeIndex={0} variant="holding" />
-        <p className="holding-tagline">holding for you</p>
+        <VelaHeader strokeIndex={strokeIndex} variant="holding" showTagline />
 
         <div className="holding-spacer" />
 

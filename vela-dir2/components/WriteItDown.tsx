@@ -1,99 +1,59 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface WriteItDownProps {
   summary: string;
+  threadType: string;
   onApprove: (text: string) => void;
-  onContinue: () => void;
 }
 
-export default function WriteItDown({ summary, onApprove }: WriteItDownProps) {
+export default function WriteItDown({ summary, threadType, onApprove }: WriteItDownProps) {
   const [text, setText] = useState(summary);
-  const [approved, setApproved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setText(summary);
+  }, [summary]);
 
   function handleApprove() {
-    if (approved) return;
-    setApproved(true);
+    if (saving || !text.trim()) return;
+    setSaving(true);
     onApprove(text.trim());
   }
 
   return (
     <div className="write-screen">
-      <div style={{ marginBottom: 8 }}>
-        <p style={{
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.06em',
-          textTransform: 'lowercase',
-          marginBottom: 6,
-        }}>
-          vela summarized this for you
+      <div className="write-screen-header">
+        <p className="write-screen-eyebrow">vela summarized this for you</p>
+        <h2 className="write-screen-title">Here is what I would hold from tonight.</h2>
+        <p className="write-screen-hint">
+          You can edit the words below before you leave.
         </p>
-        <h2 style={{
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 18,
-          fontWeight: 600,
-          color: 'var(--text-primary)',
-          lineHeight: 1.3,
-        }}>
-          Here is what I would hold from tonight.
-        </h2>
       </div>
 
-      <div className="divider-gradient" style={{ margin: '16px 0' }} />
+      <div className="divider-gradient" style={{ margin: '12px 0 16px' }} />
 
-      <div style={{
-        flex: 1,
-        background: 'var(--warm-cream)',
-        borderRadius: 12,
-        border: '1px solid var(--warm-tan)',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
+      <div className="write-summary-panel">
+        <p className="write-summary-type">{threadType}</p>
         <textarea
+          className="write-summary-field"
           value={text}
           onChange={e => setText(e.target.value)}
-          style={{
-            flex: 1,
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            fontFamily: 'var(--font-nunito), sans-serif',
-            fontSize: 14,
-            lineHeight: 1.65,
-            color: 'var(--text-primary)',
-            resize: 'none',
-            width: '100%',
-            minHeight: 180,
-          }}
+          placeholder="Your thread will appear here…"
+          autoFocus
+          rows={6}
+          aria-label="Edit what Vela will hold from tonight"
         />
-        <div style={{
-          alignSelf: 'flex-end',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          background: 'rgba(84,126,84,0.08)',
-          border: '1px solid rgba(84,126,84,0.2)',
-          borderRadius: 20,
-          padding: '3px 10px',
-          marginTop: 8,
-        }}>
-          <span style={{ fontSize: 11, color: 'var(--sage)', fontFamily: 'var(--font-nunito), sans-serif', fontWeight: 500 }}>
-            edit
-          </span>
-        </div>
+        <p className="write-summary-edit-note">Tap the text to change it.</p>
       </div>
 
       <button
         type="button"
         onClick={handleApprove}
-        disabled={approved || !text.trim()}
-        className="hold-cta-btn"
-        style={{ marginTop: 24, width: '100%' }}
+        disabled={saving || !text.trim()}
+        className="hold-cta-btn hold-cta-btn--block write-approve-btn"
       >
-        {approved ? 'Saved' : 'Approve and leave'}
+        {saving ? 'Saving…' : 'Approve and leave'}
       </button>
     </div>
   );

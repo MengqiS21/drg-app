@@ -4,7 +4,9 @@ import SignalMarker, { type DisplaySignal } from './SignalMarker';
 import ThreadSelection from './ThreadSelection';
 import HoldingScreen from './HoldingScreen';
 import WriteItDown from './WriteItDown';
+import EndPageScreen from './EndPageScreen';
 import { loadMemory, saveSession, buildMemoryContext, type Session } from '@/lib/memory';
+import { sanitizeVelaText } from '@/lib/velaPrompt';
 import type { ChatResponse } from '@/app/api/chat/route';
 
 export interface Message {
@@ -24,13 +26,14 @@ export function getStrokeIndex(): number {
   return n;
 }
 
-type UIState = 'chat' | 'threadSelect' | 'generating' | 'writeItDown' | 'holding';
+type UIState = 'chat' | 'threadSelect' | 'generating' | 'writeItDown' | 'endPage' | 'holding';
 
 interface ChatScreenProps {
+  strokeIndex: number;
   onTonightNoteChange?: (note: string) => void;
 }
 
-export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
+export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScreenProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,6 +89,8 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
 
       const signal = data.signal !== 'none' ? data.signal : undefined;
 
+      const cleanMessage = sanitizeVelaText(data.message);
+
       setMessages(prev => {
         const updated = prev.map(m =>
           m.id === userMsg.id ? { ...m, detectedSignal: signal } : m
@@ -95,7 +100,7 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: data.message,
+            content: cleanMessage,
             offerHold: data.offerHold,
           },
         ];
@@ -156,7 +161,8 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
         }),
       });
       const data: ChatResponse = await res.json();
-      setDraftNote(data.message.trim());
+      const note = sanitizeVelaText(data.message.trim());
+      setDraftNote(note || 'Something from tonight.');
       setUiState('writeItDown');
     } catch {
       setUiState('chat');
@@ -176,6 +182,10 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
     setLastThread(session);
     setHoldingData({ type: pendingThreadType, note });
     onTonightNoteChange?.(note);
+    setUiState('endPage');
+  }
+
+  function handleEndPageComplete() {
     setUiState('holding');
   }
 
@@ -223,38 +233,39 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
           </div>
         )}
 
-        {messages.map(msg => (
-          <div key={msg.id}>
-            <div
-              className="fade-in"
-              style={{
-                display: 'flex',
-                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                padding: '4px 28px',
-                marginBottom: 4,
-              }}
-            >
-              <div className={msg.role === 'user' ? 'bubble-user' : 'bubble-vela'}>
-                {msg.content}
+        {messages.map((msg, index) => {
+          const prev = index > 0 ? messages[index - 1] : null;
+          const followsSignal = msg.role === 'assistant' && prev?.role === 'user' && !!prev.detectedSignal;
+
+          return (
+            <div key={msg.id}>
+              <div
+                className={`fade-in chat-message-row ${
+                  msg.role === 'user' ? 'chat-message-row-user' : 'chat-message-row-assistant'
+                } ${followsSignal ? 'chat-message-row-after-signal' : ''}`}
+              >
+                <div className={msg.role === 'user' ? 'bubble-user' : 'bubble-vela'}>
+                  {msg.content}
+                </div>
               </div>
+
+              {msg.role === 'user' && msg.detectedSignal && (
+                <SignalMarker type={msg.detectedSignal} />
+              )}
+
+              {msg.role === 'assistant' && msg.offerHold && uiState === 'chat' && (
+                <div className="chat-hold-row fade-in">
+                  <button type="button" className="hold-cta-btn" onClick={openHoldFlow}>
+                    Leave a thread for later
+                  </button>
+                </div>
+              )}
             </div>
-
-            {msg.role === 'user' && msg.detectedSignal && (
-              <SignalMarker type={msg.detectedSignal} />
-            )}
-
-            {msg.role === 'assistant' && msg.offerHold && uiState === 'chat' && (
-              <div style={{ padding: '12px 28px 8px' }}>
-                <button type="button" className="hold-cta-btn" onClick={openHoldFlow}>
-                  Leave a thread for later
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {quietHoldPending && !exitMode && uiState === 'chat' && (
-          <div style={{ padding: '12px 28px 8px' }} className="fade-in">
+          <div className="chat-hold-row fade-in">
             <button type="button" className="hold-cta-btn hold-cta-quiet" onClick={openHoldFlow}>
               Leave a thread for later
             </button>
@@ -296,19 +307,23 @@ export default function ChatScreen({ onTonightNoteChange }: ChatScreenProps) {
         />
       )}
 
-      {uiState === 'writeItDown' && (
+      {uiState === 'writeItDown' && draftNote && (
         <WriteItDown
+          key={draftNote}
           summary={draftNote}
+          threadType={pendingThreadType}
           onApprove={handleApproveAndLeave}
-          onContinue={() => {}}
         />
       )}
+
+      {uiState === 'endPage' && <EndPageScreen onComplete={handleEndPageComplete} />}
 
       {uiState === 'holding' && holdingData && (
         <HoldingScreen
           threadType={holdingData.type}
           threadNote={holdingData.note}
           userName={userName}
+          strokeIndex={strokeIndex}
           onDismiss={handleHoldingDismiss}
         />
       )}

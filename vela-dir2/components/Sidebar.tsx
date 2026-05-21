@@ -30,8 +30,7 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
 
   return (
     <aside className="sidebar-panel">
-      <VelaHeader strokeIndex={strokeIndex} variant="sidebar" />
-      <p className="sidebar-always-here">always here</p>
+      <VelaHeader strokeIndex={strokeIndex} variant="sidebar" showTagline />
 
       <div className="divider-gradient" />
 

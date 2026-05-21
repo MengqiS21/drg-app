@@ -52,10 +52,10 @@ export default function ThreadSelection({ onContinue, onSkip, loading }: ThreadS
           type="button"
           onClick={() => selected && onContinue(OPTIONS.find(o => o.id === selected)!.label)}
           disabled={!selected || loading}
-          className="hold-cta-btn"
-          style={{ width: '100%', opacity: !selected || loading ? 0.55 : 1 }}
+          className="hold-cta-btn hold-cta-btn--block"
+          style={{ opacity: !selected || loading ? 0.55 : 1 }}
         >
-          {loading ? 'Writing it down…' : 'Continue'}
+          {loading ? 'Writing it down…' : 'Write it down'}
         </button>
         <button type="button" onClick={onSkip} disabled={loading} className="thread-skip-btn">
           Leave without saving

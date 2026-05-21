@@ -65,7 +65,7 @@ export default function AppLayout() {
           </p>
         </div>
 
-        <ChatScreen onTonightNoteChange={setTonightNote} />
+        <ChatScreen strokeIndex={strokeIndex} onTonightNoteChange={setTonightNote} />
       </div>
     </div>
   );
