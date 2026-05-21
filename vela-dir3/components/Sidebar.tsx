@@ -31,8 +31,7 @@ export default function Sidebar({ strokeIndex, onEndSession, tonightNote }: Side
 
   return (
     <aside style={{
-      width: 280,
-      minWidth: 280,
+      width: '100%',
       height: '100vh',
       background: 'var(--sidebar-bg)',
       borderRight: '1px solid var(--sidebar-border)',

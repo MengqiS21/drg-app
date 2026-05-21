@@ -17,8 +17,7 @@ interface VelaHeaderProps {
 export default function VelaHeader({ strokeIndex = 0, onEndSession, size = 'default' }: VelaHeaderProps) {
   const stroke = STROKES[strokeIndex % STROKES.length];
   const isSidebar = size === 'sidebar';
-  const gradId = `auroraGrad-${strokeIndex}-${isSidebar ? 's' : 'd'}`;
-  const filtId = `inkBlur-${strokeIndex}-${isSidebar ? 's' : 'd'}`;
+  const uid = `vg-${strokeIndex}-${isSidebar ? 's' : 'd'}`;
 
   return (
     <div style={{
@@ -26,49 +25,28 @@ export default function VelaHeader({ strokeIndex = 0, onEndSession, size = 'defa
       display: 'flex',
       alignItems: 'flex-end',
       justifyContent: 'space-between',
-      position: 'relative',
     }}>
       <div style={{ position: 'relative', display: 'inline-block' }}>
-        {/* Aurora animated stroke — SVG animate shifts colors like the northern lights */}
+        {/* CSS-animated aurora stroke — hue-rotate shifts sage→olive→warm */}
         <svg
-          width="180"
-          height="36"
-          viewBox="0 0 180 36"
+          width="180" height="36" viewBox="0 0 180 36"
+          className="aurora-stroke"
           style={{ position: 'absolute', top: -8, left: -10, pointerEvents: 'none' }}
         >
           <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="rgba(84,126,84,0)" />
-              <stop offset="25%" stopColor="rgba(107,145,88,0.7)">
-                <animate
-                  attributeName="stop-color"
-                  values="rgba(107,145,88,0.7);rgba(155,175,90,0.65);rgba(175,148,75,0.6);rgba(120,155,110,0.7);rgba(107,145,88,0.7)"
-                  dur="5s"
-                  repeatCount="indefinite"
-                />
-              </stop>
-              <stop offset="60%" stopColor="rgba(144,165,80,0.6)">
-                <animate
-                  attributeName="stop-color"
-                  values="rgba(144,165,80,0.6);rgba(107,145,88,0.65);rgba(155,175,90,0.55);rgba(175,148,75,0.6);rgba(144,165,80,0.6)"
-                  dur="5s"
-                  begin="1.5s"
-                  repeatCount="indefinite"
-                />
-              </stop>
+            <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor="rgba(84,126,84,0)" />
+              <stop offset="25%"  stopColor="rgba(107,145,88,0.75)" />
+              <stop offset="65%"  stopColor="rgba(140,162,80,0.65)" />
               <stop offset="100%" stopColor="rgba(84,126,84,0)" />
             </linearGradient>
-            <filter id={filtId}>
-              <feGaussianBlur stdDeviation="0.9" />
-            </filter>
           </defs>
           <path
             d={stroke}
-            stroke={`url(#${gradId})`}
+            stroke={`url(#${uid})`}
             strokeWidth={isSidebar ? '2.8' : '2.2'}
             fill="none"
             strokeLinecap="round"
-            filter={`url(#${filtId})`}
           />
         </svg>
 
@@ -86,19 +64,12 @@ export default function VelaHeader({ strokeIndex = 0, onEndSession, size = 'defa
       </div>
 
       {onEndSession && (
-        <button
-          onClick={onEndSession}
-          style={{
-            fontFamily: 'var(--font-nunito), sans-serif',
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            letterSpacing: '0.03em',
-            padding: '4px 0',
-          }}
-        >
+        <button onClick={onEndSession} style={{
+          fontFamily: 'var(--font-nunito), sans-serif',
+          fontSize: 12, color: 'var(--text-muted)',
+          background: 'none', border: 'none', cursor: 'pointer',
+          letterSpacing: '0.03em', padding: '4px 0',
+        }}>
           end session
         </button>
       )}

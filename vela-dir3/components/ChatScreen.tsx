@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import SignalMarker from './SignalMarker';
 import BreathOverlay from './BreathOverlay';
+import ThreadSelection from './ThreadSelection';
 import WriteItDown from './WriteItDown';
 import { loadMemory, saveSession, buildMemoryContext } from '@/lib/memory';
 import type { ChatResponse } from '@/app/api/chat/route';
@@ -22,6 +23,8 @@ export function getStrokeIndex(): number {
   return n;
 }
 
+type UIState = 'chat' | 'breath' | 'threadSelect' | 'writeItDown';
+
 interface ChatScreenProps {
   onTonightNoteChange?: (note: string) => void;
   triggerEndSession?: boolean;
@@ -32,7 +35,7 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [uiState, setUiState] = useState<'chat' | 'breath' | 'writeItDown'>('chat');
+  const [uiState, setUiState] = useState<UIState>('chat');
   const [sessionSummary, setSessionSummary] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -50,9 +53,15 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
   }, [messages, loading]);
 
   useEffect(() => {
-    if (triggerEndSession) { handleEndSession(); onEndSessionHandled?.(); }
+    if (triggerEndSession) { goToThreadSelect(); onEndSessionHandled?.(); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerEndSession]);
+
+  function goToThreadSelect() {
+    const relevant = messages.filter(m => m.id !== 'opening');
+    if (relevant.length < 2) return;
+    setUiState('threadSelect');
+  }
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -72,13 +81,14 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
         body: JSON.stringify({ history, memory: buildMemoryContext(memory) }),
       });
       const data: ChatResponse = await res.json();
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: data.message, signal: data.signal }]);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(), role: 'assistant',
+        content: data.message, signal: data.signal,
+      }]);
       if (data.offerBreath) setTimeout(() => setUiState('breath'), 600);
     } catch {
       setMessages(prev => [...prev, { id: 'err', role: 'assistant', content: "Something went quiet. Try again?" }]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [input, loading, messages]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -91,16 +101,19 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   }
 
-  async function handleEndSession() {
-    const relevant = messages.filter(m => m.id !== 'opening');
-    if (relevant.length < 2) return;
+  async function handleThreadContinue(selectedItems: string[]) {
+    setUiState('chat');
     setLoading(true);
     try {
+      const relevant = messages.filter(m => m.id !== 'opening');
+      const focusHint = selectedItems.length > 0 ? `Focus on: ${selectedItems.join(', ')}.` : '';
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          history: [...relevant.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: "Write a brief memory note (2-4 sentences) of what was shared tonight, as Vela. No [META] tag." }],
+          history: [
+            ...relevant.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: `Write a brief memory note (2-4 sentences) of tonight, as Vela. ${focusHint} No [META] tag.` },
+          ],
           memory: null,
         }),
       });
@@ -154,8 +167,15 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
       </div>
 
       {uiState === 'breath' && <BreathOverlay onClose={() => setUiState('chat')} />}
+      {uiState === 'threadSelect' && (
+        <ThreadSelection onContinue={handleThreadContinue} onSkip={handleLeave} />
+      )}
       {uiState === 'writeItDown' && (
-        <WriteItDown summary={sessionSummary} onApprove={note => { saveSession(note); onTonightNoteChange?.(note); }} onContinue={handleLeave} />
+        <WriteItDown
+          summary={sessionSummary}
+          onApprove={note => { saveSession(note); onTonightNoteChange?.(note); }}
+          onContinue={handleLeave}
+        />
       )}
     </div>
   );

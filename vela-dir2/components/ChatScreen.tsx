@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import SignalMarker from './SignalMarker';
 import BreathOverlay from './BreathOverlay';
+import ThreadSelection from './ThreadSelection';
 import WriteItDown from './WriteItDown';
 import { loadMemory, saveSession, buildMemoryContext } from '@/lib/memory';
 import type { ChatResponse } from '@/app/api/chat/route';
@@ -18,8 +19,7 @@ const STROKE_KEY = 'vela_stroke_index';
 export function getStrokeIndex(): number {
   if (typeof window === 'undefined') return 0;
   const n = parseInt(localStorage.getItem(STROKE_KEY) ?? '0', 10);
-  const next = (n + 1) % 5;
-  localStorage.setItem(STROKE_KEY, String(next));
+  localStorage.setItem(STROKE_KEY, String((n + 1) % 5));
   return n;
 }
 
@@ -30,6 +30,8 @@ interface ChatScreenProps {
   onEndSessionHandled?: () => void;
 }
 
+type UIState = 'chat' | 'breath' | 'threadSelect' | 'writeItDown';
+
 export default function ChatScreen({
   onTonightNoteChange,
   onEndSession,
@@ -39,7 +41,7 @@ export default function ChatScreen({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [uiState, setUiState] = useState<'chat' | 'breath' | 'writeItDown'>('chat');
+  const [uiState, setUiState] = useState<UIState>('chat');
   const [sessionSummary, setSessionSummary] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -47,8 +49,7 @@ export default function ChatScreen({
   useEffect(() => {
     const memory = loadMemory();
     setMessages([{
-      id: 'opening',
-      role: 'assistant',
+      id: 'opening', role: 'assistant',
       content: memory.sessions.length > 0
         ? "It's good to have you back."
         : "Hello. I'm Vela. I'm here whenever you're ready.",
@@ -56,70 +57,55 @@ export default function ChatScreen({
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, loading]);
 
   useEffect(() => {
     if (triggerEndSession) {
-      handleEndSession();
+      goToThreadSelect();
       onEndSessionHandled?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerEndSession]);
 
+  function goToThreadSelect() {
+    const relevant = messages.filter(m => m.id !== 'opening');
+    if (relevant.length < 2) { onEndSession?.(); return; }
+    setUiState('threadSelect');
+  }
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
-
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput('');
     setLoading(true);
-
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
       const memory = loadMemory();
-      const memoryContext = buildMemoryContext(memory);
-      const history = nextMessages
-        .filter(m => m.id !== 'opening')
-        .map(m => ({ role: m.role, content: m.content }));
-
+      const history = nextMessages.filter(m => m.id !== 'opening').map(m => ({ role: m.role, content: m.content }));
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history, memory: memoryContext }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history, memory: buildMemoryContext(memory) }),
       });
-
       const data: ChatResponse = await res.json();
-      const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.message,
-        signal: data.signal,
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(), role: 'assistant',
+        content: data.message, signal: data.signal,
+      }]);
       if (data.offerBreath) setTimeout(() => setUiState('breath'), 600);
     } catch {
-      setMessages(prev => [...prev, {
-        id: 'err',
-        role: 'assistant',
-        content: "I'm here — something went quiet for a moment. Try again?",
-      }]);
+      setMessages(prev => [...prev, { id: 'err', role: 'assistant', content: "I'm here — something went quiet. Try again?" }]);
     } finally {
       setLoading(false);
     }
   }, [input, loading, messages]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -128,21 +114,22 @@ export default function ChatScreen({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   }
 
-  async function handleEndSession() {
-    const relevant = messages.filter(m => m.id !== 'opening');
-    if (relevant.length < 2) { onEndSession?.(); return; }
-
+  async function handleThreadContinue(selectedItems: string[]) {
+    setUiState('chat');
     setLoading(true);
     try {
+      const relevant = messages.filter(m => m.id !== 'opening');
+      const focusHint = selectedItems.length > 0
+        ? `Focus especially on: ${selectedItems.join(', ')}.`
+        : '';
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           history: [
             ...relevant.map(m => ({ role: m.role, content: m.content })),
             {
               role: 'user',
-              content: "Please write a brief memory note (2-4 sentences) of what was shared tonight, as if quietly noting it for next time. First person as Vela. No [META] tag.",
+              content: `Please write a brief memory note (2-4 sentences) of what was shared tonight, as if quietly noting it for next time. First person as Vela. ${focusHint} No [META] tag.`,
             },
           ],
           memory: null,
@@ -160,38 +147,27 @@ export default function ChatScreen({
     }
   }
 
-  function handleApproveMemory(text: string) {
-    saveSession(text);
-    onTonightNoteChange?.(text);
-  }
-
   function handleLeave() {
     setUiState('chat');
-    setMessages([{
-      id: 'return',
-      role: 'assistant',
-      content: "Take care of yourself. I'll be here.",
-    }]);
+    setMessages([{ id: 'return', role: 'assistant', content: "Take care of yourself. I'll be here." }]);
     onEndSession?.();
   }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+      {/* Chat messages */}
       <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, padding: '32px 0 8px' }}>
         {messages.map((msg, i) => (
           <div key={msg.id}>
             {msg.role === 'assistant' && msg.signal && msg.signal !== 'none' && (
               <SignalMarker type={msg.signal} />
             )}
-            <div
-              className="fade-in"
-              style={{
-                display: 'flex',
-                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                padding: '4px 28px',
-                marginBottom: i < messages.length - 1 ? 4 : 0,
-              }}
-            >
+            <div className="fade-in" style={{
+              display: 'flex',
+              justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              padding: '4px 28px',
+              marginBottom: i < messages.length - 1 ? 4 : 0,
+            }}>
               <div className={msg.role === 'user' ? 'bubble-user' : 'bubble-vela'}>
                 {msg.content}
               </div>
@@ -208,15 +184,12 @@ export default function ChatScreen({
         )}
       </div>
 
+      {/* Input */}
       <div className="input-bar">
         <textarea
-          ref={textareaRef}
-          className="input-field"
-          value={input}
-          onChange={handleTextareaChange}
-          onKeyDown={handleKeyDown}
-          placeholder="say something…"
-          rows={1}
+          ref={textareaRef} className="input-field" value={input}
+          onChange={handleTextareaChange} onKeyDown={handleKeyDown}
+          placeholder="say something…" rows={1}
           disabled={loading || uiState !== 'chat'}
         />
         <button className="send-btn" onClick={sendMessage} disabled={!input.trim() || loading} aria-label="Send">
@@ -226,9 +199,20 @@ export default function ChatScreen({
         </button>
       </div>
 
+      {/* Overlays */}
       {uiState === 'breath' && <BreathOverlay onClose={() => setUiState('chat')} />}
+      {uiState === 'threadSelect' && (
+        <ThreadSelection
+          onContinue={handleThreadContinue}
+          onSkip={handleLeave}
+        />
+      )}
       {uiState === 'writeItDown' && (
-        <WriteItDown summary={sessionSummary} onApprove={handleApproveMemory} onContinue={handleLeave} />
+        <WriteItDown
+          summary={sessionSummary}
+          onApprove={text => { saveSession(text); onTonightNoteChange?.(text); }}
+          onContinue={handleLeave}
+        />
       )}
     </div>
   );

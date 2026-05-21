@@ -243,3 +243,15 @@ body {
 .fade-in {
   animation: fadeInUp 0.3s ease-out forwards;
 }
+
+/* Aurora stroke animation — shifts hue through sage→olive→warm→sage */
+@keyframes auroraHue {
+  0%   { filter: hue-rotate(0deg)   brightness(1)    blur(0.9px); }
+  25%  { filter: hue-rotate(22deg)  brightness(1.12) blur(1.1px); }
+  50%  { filter: hue-rotate(-18deg) brightness(1.05) blur(0.8px); }
+  75%  { filter: hue-rotate(14deg)  brightness(1.08) blur(1px);   }
+  100% { filter: hue-rotate(0deg)   brightness(1)    blur(0.9px); }
+}
+.aurora-stroke {
+  animation: auroraHue 5s ease-in-out infinite;
+}

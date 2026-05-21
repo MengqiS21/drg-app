@@ -181,6 +181,16 @@ body {
 }
 .fade-in { animation: fadeInUp 0.3s ease-out forwards; }
 
+/* Aurora stroke — shifts rose→sage→warm→rose */
+@keyframes auroraHue {
+  0%   { filter: hue-rotate(0deg)   brightness(1)    blur(1px);   }
+  25%  { filter: hue-rotate(30deg)  brightness(1.12) blur(1.2px); }
+  50%  { filter: hue-rotate(-20deg) brightness(1.05) blur(0.9px); }
+  75%  { filter: hue-rotate(18deg)  brightness(1.08) blur(1.1px); }
+  100% { filter: hue-rotate(0deg)   brightness(1)    blur(1px);   }
+}
+.aurora-stroke { animation: auroraHue 6s ease-in-out infinite; }
+
 /* ─── Aurora meditation background ─── */
 .aurora-container {
   position: absolute;
