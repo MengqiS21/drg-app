@@ -1,10 +1,9 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import SignalMarker from './SignalMarker';
-import BreathOverlay from './BreathOverlay';
 import ThreadSelection from './ThreadSelection';
-import WriteItDown from './WriteItDown';
-import { loadMemory, saveSession, buildMemoryContext } from '@/lib/memory';
+import HoldingScreen from './HoldingScreen';
+import { loadMemory, saveSession, buildMemoryContext, type Session } from '@/lib/memory';
 import type { ChatResponse } from '@/app/api/chat/route';
 
 export interface Message {
@@ -12,6 +11,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   signal?: 'quiet_signal' | 'explicit_signal' | 'none';
+  showThreadPill?: boolean; // shown below explicit_signal messages
 }
 
 const STROKE_KEY = 'vela_stroke_index';
@@ -23,14 +23,14 @@ export function getStrokeIndex(): number {
   return n;
 }
 
+type UIState = 'chat' | 'threadSelect' | 'generating' | 'holding';
+
 interface ChatScreenProps {
   onTonightNoteChange?: (note: string) => void;
   onEndSession?: () => void;
   triggerEndSession?: boolean;
   onEndSessionHandled?: () => void;
 }
-
-type UIState = 'chat' | 'breath' | 'threadSelect' | 'writeItDown';
 
 export default function ChatScreen({
   onTonightNoteChange,
@@ -42,12 +42,19 @@ export default function ChatScreen({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [uiState, setUiState] = useState<UIState>('chat');
-  const [sessionSummary, setSessionSummary] = useState('');
+  const [holdingData, setHoldingData] = useState<{ type: string; note: string } | null>(null);
+  const [lastThread, setLastThread] = useState<Session | null>(null);
+  const [userName, setUserNameLocal] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const memory = loadMemory();
+    setUserNameLocal(memory.userName || '');
+    // Load last saved thread to show at top
+    if (memory.sessions.length > 0) {
+      setLastThread(memory.sessions[0]);
+    }
     setMessages([{
       id: 'opening', role: 'assistant',
       content: memory.sessions.length > 0
@@ -62,17 +69,11 @@ export default function ChatScreen({
 
   useEffect(() => {
     if (triggerEndSession) {
-      goToThreadSelect();
+      setUiState('threadSelect');
       onEndSessionHandled?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerEndSession]);
-
-  function goToThreadSelect() {
-    const relevant = messages.filter(m => m.id !== 'opening');
-    if (relevant.length < 2) { onEndSession?.(); return; }
-    setUiState('threadSelect');
-  }
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -92,11 +93,12 @@ export default function ChatScreen({
         body: JSON.stringify({ history, memory: buildMemoryContext(memory) }),
       });
       const data: ChatResponse = await res.json();
+      const isExplicit = data.signal === 'explicit_signal';
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(), role: 'assistant',
         content: data.message, signal: data.signal,
+        showThreadPill: isExplicit,
       }]);
-      if (data.offerBreath) setTimeout(() => setUiState('breath'), 600);
     } catch {
       setMessages(prev => [...prev, { id: 'err', role: 'assistant', content: "I'm here — something went quiet. Try again?" }]);
     } finally {
@@ -114,14 +116,11 @@ export default function ChatScreen({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   }
 
-  async function handleThreadContinue(selectedItems: string[]) {
-    setUiState('chat');
+  async function handleThreadContinue(selectedType: string) {
+    setUiState('generating');
     setLoading(true);
     try {
       const relevant = messages.filter(m => m.id !== 'opening');
-      const focusHint = selectedItems.length > 0
-        ? `Focus especially on: ${selectedItems.join(', ')}.`
-        : '';
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -129,34 +128,66 @@ export default function ChatScreen({
             ...relevant.map(m => ({ role: m.role, content: m.content })),
             {
               role: 'user',
-              content: `Please write a brief memory note (2-4 sentences) of what was shared tonight, as if quietly noting it for next time. First person as Vela. ${focusHint} No [META] tag.`,
+              content: `Capture ${selectedType} from our conversation tonight in one precise, evocative sentence — as if naming it gently. No preamble, no quotation marks, no explanation. Just the sentence itself. No [META] tag.`,
             },
           ],
           memory: null,
         }),
       });
       const data: ChatResponse = await res.json();
-      setSessionSummary(data.message);
-      onTonightNoteChange?.(data.message);
-      setUiState('writeItDown');
+      const note = data.message.trim();
+      saveSession(note, selectedType);
+      setLastThread({ id: Date.now().toString(), date: new Date().toISOString(), note, type: selectedType });
+      setHoldingData({ type: selectedType, note });
+      onTonightNoteChange?.(note);
+      setUiState('holding');
     } catch {
-      setSessionSummary("We talked tonight. I'll hold what you shared.");
-      setUiState('writeItDown');
+      setUiState('chat');
     } finally {
       setLoading(false);
     }
   }
 
-  function handleLeave() {
+  function handleHoldingDismiss() {
     setUiState('chat');
-    setMessages([{ id: 'return', role: 'assistant', content: "Take care of yourself. I'll be here." }]);
+    setMessages([{
+      id: 'return', role: 'assistant',
+      content: "Take care of yourself. I'll be here.",
+    }]);
     onEndSession?.();
   }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-      {/* Chat messages */}
-      <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, padding: '32px 0 8px' }}>
+      <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, padding: '24px 0 8px' }}>
+
+        {/* Last session thread shown at top on return */}
+        {lastThread && messages[0]?.id === 'opening' && messages[0]?.content.includes('back') && (
+          <div style={{ padding: '0 28px 20px' }}>
+            <div style={{
+              background: 'rgba(84,126,84,0.07)',
+              border: '1px solid rgba(84,126,84,0.18)',
+              borderLeft: '3px solid var(--sage)',
+              borderRadius: '2px 12px 12px 2px',
+              padding: '12px 16px',
+            }}>
+              <p style={{
+                fontFamily: 'var(--font-nunito), sans-serif',
+                fontSize: 10, fontWeight: 700, color: 'var(--sage)',
+                letterSpacing: '0.05em', marginBottom: 4, textTransform: 'lowercase',
+              }}>
+                {lastThread.type ?? 'from last time'}
+              </p>
+              <p style={{
+                fontFamily: 'var(--font-nunito), sans-serif',
+                fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5,
+              }}>
+                {lastThread.note}
+              </p>
+            </div>
+          </div>
+        )}
+
         {messages.map((msg, i) => (
           <div key={msg.id}>
             {msg.role === 'assistant' && msg.signal && msg.signal !== 'none' && (
@@ -172,6 +203,31 @@ export default function ChatScreen({
                 {msg.content}
               </div>
             </div>
+
+            {/* Thread invitation pill after explicit_signal */}
+            {msg.showThreadPill && uiState === 'chat' && (
+              <div style={{ padding: '8px 28px 4px', display: 'flex' }}>
+                <button
+                  onClick={() => setUiState('threadSelect')}
+                  style={{
+                    fontFamily: 'var(--font-nunito), sans-serif',
+                    fontSize: 12, fontWeight: 600,
+                    color: 'var(--sage)',
+                    background: 'rgba(84,126,84,0.08)',
+                    border: '1px solid rgba(84,126,84,0.22)',
+                    borderRadius: 20,
+                    padding: '5px 14px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.02em',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    transition: 'background 0.18s',
+                  }}
+                >
+                  <span>leave a thread</span>
+                  <span style={{ fontSize: 13 }}>→</span>
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
@@ -200,18 +256,18 @@ export default function ChatScreen({
       </div>
 
       {/* Overlays */}
-      {uiState === 'breath' && <BreathOverlay onClose={() => setUiState('chat')} />}
-      {uiState === 'threadSelect' && (
+      {(uiState === 'threadSelect' || uiState === 'generating') && (
         <ThreadSelection
           onContinue={handleThreadContinue}
-          onSkip={handleLeave}
+          onSkip={handleHoldingDismiss}
         />
       )}
-      {uiState === 'writeItDown' && (
-        <WriteItDown
-          summary={sessionSummary}
-          onApprove={text => { saveSession(text); onTonightNoteChange?.(text); }}
-          onContinue={handleLeave}
+      {uiState === 'holding' && holdingData && (
+        <HoldingScreen
+          threadType={holdingData.type}
+          threadNote={holdingData.note}
+          userName={userName}
+          onDismiss={handleHoldingDismiss}
         />
       )}
     </div>
