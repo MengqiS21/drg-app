@@ -47,9 +47,9 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
       {/* Editable text box */}
       <div style={{
         flex: 1,
-        background: 'var(--warm-cream)',
+        background: 'rgba(255,255,255,0.04)',
         borderRadius: 12,
-        border: '1px solid var(--warm-tan)',
+        border: '1px solid rgba(255,255,255,0.09)',
         padding: '16px',
         position: 'relative',
         display: 'flex',
@@ -66,7 +66,7 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
             fontFamily: 'var(--font-nunito), sans-serif',
             fontSize: 14,
             lineHeight: 1.65,
-            color: 'var(--text-primary)',
+            color: 'var(--text-secondary)',
             resize: 'none',
             width: '100%',
             minHeight: 180,
@@ -78,13 +78,13 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          background: 'rgba(84,126,84,0.08)',
-          border: '1px solid rgba(84,126,84,0.2)',
+          background: 'rgba(188,140,200,0.08)',
+          border: '1px solid rgba(188,140,200,0.22)',
           borderRadius: 20,
           padding: '3px 10px',
           marginTop: 8,
         }}>
-          <span style={{ fontSize: 11, color: 'var(--sage)', fontFamily: 'var(--font-nunito), sans-serif', fontWeight: 500 }}>
+          <span style={{ fontSize: 11, color: 'var(--rose-dim)', fontFamily: 'var(--font-nunito), sans-serif', fontWeight: 500 }}>
             ✎ edit
           </span>
         </div>
@@ -99,7 +99,7 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
           width: '100%',
           height: 48,
           borderRadius: 24,
-          background: approved ? 'var(--sage-light)' : 'var(--sage)',
+          background: approved ? 'rgba(188,140,200,0.4)' : 'rgba(188,140,200,0.75)',
           color: '#fff',
           fontFamily: 'var(--font-nunito), sans-serif',
           fontSize: 15,

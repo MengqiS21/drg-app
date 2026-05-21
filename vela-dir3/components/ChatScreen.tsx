@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import SignalMarker from './SignalMarker';
 import BreathOverlay from './BreathOverlay';
-import ThreadSelection from './ThreadSelection';
 import WriteItDown from './WriteItDown';
 import { loadMemory, saveSession, buildMemoryContext } from '@/lib/memory';
 import type { ChatResponse } from '@/app/api/chat/route';
@@ -12,6 +11,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   signal?: 'quiet_signal' | 'explicit_signal' | 'none';
+  showBreathPill?: boolean;
 }
 
 const STROKE_KEY = 'vela_d3_stroke_index';
@@ -23,7 +23,7 @@ export function getStrokeIndex(): number {
   return n;
 }
 
-type UIState = 'chat' | 'breath' | 'threadSelect' | 'writeItDown';
+type UIState = 'chat' | 'breath' | 'generating' | 'writeItDown';
 
 interface ChatScreenProps {
   onTonightNoteChange?: (note: string) => void;
@@ -53,14 +53,39 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
   }, [messages, loading]);
 
   useEffect(() => {
-    if (triggerEndSession) { goToThreadSelect(); onEndSessionHandled?.(); }
+    if (triggerEndSession) { goToWriteItDown(); onEndSessionHandled?.(); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerEndSession]);
 
-  function goToThreadSelect() {
+  async function goToWriteItDown() {
     const relevant = messages.filter(m => m.id !== 'opening');
     if (relevant.length < 2) return;
-    setUiState('threadSelect');
+    setUiState('generating');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: [
+            ...relevant.map(m => ({ role: m.role, content: m.content })),
+            {
+              role: 'user',
+              content: 'Write a brief memory note (2-4 sentences) of tonight, as Vela. No [META] tag.',
+            },
+          ],
+          memory: null,
+        }),
+      });
+      const data: ChatResponse = await res.json();
+      setSessionSummary(data.message);
+      onTonightNoteChange?.(data.message);
+      setUiState('writeItDown');
+    } catch {
+      setSessionSummary('We sat together tonight.');
+      setUiState('writeItDown');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const sendMessage = useCallback(async () => {
@@ -84,8 +109,8 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(), role: 'assistant',
         content: data.message, signal: data.signal,
+        showBreathPill: !!data.offerBreath,
       }]);
-      if (data.offerBreath) setTimeout(() => setUiState('breath'), 600);
     } catch {
       setMessages(prev => [...prev, { id: 'err', role: 'assistant', content: "Something went quiet. Try again?" }]);
     } finally { setLoading(false); }
@@ -99,31 +124,6 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
     setInput(e.target.value);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-  }
-
-  async function handleThreadContinue(selectedItems: string[]) {
-    setUiState('chat');
-    setLoading(true);
-    try {
-      const relevant = messages.filter(m => m.id !== 'opening');
-      const focusHint = selectedItems.length > 0 ? `Focus on: ${selectedItems.join(', ')}.` : '';
-      const res = await fetch('/api/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          history: [
-            ...relevant.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: `Write a brief memory note (2-4 sentences) of tonight, as Vela. ${focusHint} No [META] tag.` },
-          ],
-          memory: null,
-        }),
-      });
-      const data: ChatResponse = await res.json();
-      setSessionSummary(data.message);
-      onTonightNoteChange?.(data.message);
-      setUiState('writeItDown');
-    } catch {
-      setSessionSummary("We sat together tonight."); setUiState('writeItDown');
-    } finally { setLoading(false); }
   }
 
   function handleLeave() {
@@ -144,9 +144,35 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
             }}>
               <div className={msg.role === 'user' ? 'bubble-user' : 'bubble-vela'}>{msg.content}</div>
             </div>
+
+            {/* Breath invitation pill after offerBreath messages */}
+            {msg.showBreathPill && uiState === 'chat' && (
+              <div style={{ padding: '8px 28px 4px', display: 'flex' }}>
+                <button
+                  onClick={() => setUiState('breath')}
+                  style={{
+                    fontFamily: 'var(--font-nunito), sans-serif',
+                    fontSize: 12, fontWeight: 600,
+                    color: 'var(--rose)',
+                    background: 'rgba(188,140,200,0.1)',
+                    border: '1px solid rgba(188,140,200,0.28)',
+                    borderRadius: 20,
+                    padding: '5px 14px',
+                    cursor: 'pointer',
+                    letterSpacing: '0.02em',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    transition: 'background 0.18s',
+                  }}
+                >
+                  <span>take a breath with me</span>
+                  <span style={{ fontSize: 13 }}>→</span>
+                </button>
+              </div>
+            )}
           </div>
         ))}
-        {loading && (
+
+        {(loading || uiState === 'generating') && (
           <div style={{ display: 'flex', padding: '8px 28px' }}>
             <div className="bubble-vela" style={{ display: 'flex', gap: 5, padding: '12px 16px', alignItems: 'center' }}>
               <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
@@ -167,9 +193,6 @@ export default function ChatScreen({ onTonightNoteChange, triggerEndSession, onE
       </div>
 
       {uiState === 'breath' && <BreathOverlay onClose={() => setUiState('chat')} />}
-      {uiState === 'threadSelect' && (
-        <ThreadSelection onContinue={handleThreadContinue} onSkip={handleLeave} />
-      )}
       {uiState === 'writeItDown' && (
         <WriteItDown
           summary={sessionSummary}
