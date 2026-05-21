@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { VELA_SYSTEM_PROMPT, buildMessagesWithMemory } from '@/lib/velaPrompt';
+import { VELA_DIR3_SYSTEM_PROMPT, buildMessagesWithMemory, sanitizeVelaText } from '@/lib/velaPrompt';
 
 const client = new Anthropic();
+
+export type PaceSignal = 'pace_signal' | 'weight_signal' | 'intense_signal' | 'none';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -11,32 +13,38 @@ export interface ChatMessage {
 
 export interface ChatResponse {
   message: string;
-  signal: 'quiet_signal' | 'explicit_signal' | 'none';
-  offerBreath: boolean;
+  signal: PaceSignal;
+  triggerBreath: boolean;
 }
 
 function parseVelaResponse(raw: string): ChatResponse {
   const metaMatch = raw.match(/\[META\]\s*(\{[\s\S]*?\})\s*$/);
 
-  let signal: ChatResponse['signal'] = 'none';
-  let offerBreath = false;
+  let signal: PaceSignal = 'none';
+  let triggerBreath = false;
   let message = raw;
 
   if (metaMatch) {
     try {
       const meta = JSON.parse(metaMatch[1]);
-      signal = meta.signal ?? 'none';
-      offerBreath = meta.offerBreath ?? false;
+      const s = meta.signal;
+      if (s === 'pace_signal' || s === 'weight_signal' || s === 'intense_signal' || s === 'none') {
+        signal = s;
+      }
+      triggerBreath = Boolean(meta.triggerBreath);
     } catch {
-      // malformed meta — keep defaults
+      // keep defaults
     }
     message = raw.slice(0, metaMatch.index).trim();
   }
 
-  // Also strip [OFFER_BREATH] if Claude used the old marker
-  message = message.replace(/\[OFFER_BREATH\]\s*$/, '').trim();
+  message = sanitizeVelaText(message);
 
-  return { message, signal, offerBreath };
+  if (signal !== 'none' && !triggerBreath) {
+    triggerBreath = signal === 'intense_signal';
+  }
+
+  return { message, signal, triggerBreath };
 }
 
 export async function POST(req: NextRequest) {
@@ -53,7 +61,7 @@ export async function POST(req: NextRequest) {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 600,
-      system: VELA_SYSTEM_PROMPT,
+      system: VELA_DIR3_SYSTEM_PROMPT,
       messages,
     });
 

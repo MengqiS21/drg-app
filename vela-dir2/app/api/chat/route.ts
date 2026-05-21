@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import { VELA_SYSTEM_PROMPT, buildMessagesWithMemory } from '@/lib/velaPrompt';
+import { VELA_DIR2_SYSTEM_PROMPT, buildMessagesWithMemory, sanitizeVelaText } from '@/lib/velaPrompt';
 
 const client = new Anthropic();
+
+export type ExitSignal = 'quiet_signal' | 'explicit_signal' | 'gentle_forced_exit' | 'none';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -11,32 +13,38 @@ export interface ChatMessage {
 
 export interface ChatResponse {
   message: string;
-  signal: 'quiet_signal' | 'explicit_signal' | 'none';
-  offerBreath: boolean;
+  signal: ExitSignal;
+  offerHold: boolean;
 }
 
 function parseVelaResponse(raw: string): ChatResponse {
   const metaMatch = raw.match(/\[META\]\s*(\{[\s\S]*?\})\s*$/);
 
-  let signal: ChatResponse['signal'] = 'none';
-  let offerBreath = false;
+  let signal: ExitSignal = 'none';
+  let offerHold = false;
   let message = raw;
 
   if (metaMatch) {
     try {
       const meta = JSON.parse(metaMatch[1]);
-      signal = meta.signal ?? 'none';
-      offerBreath = meta.offerBreath ?? false;
+      const s = meta.signal;
+      if (s === 'quiet_signal' || s === 'explicit_signal' || s === 'gentle_forced_exit' || s === 'none') {
+        signal = s;
+      }
+      offerHold = Boolean(meta.offerHold);
     } catch {
-      // malformed meta — keep defaults
+      // keep defaults
     }
     message = raw.slice(0, metaMatch.index).trim();
   }
 
-  // Also strip [OFFER_BREATH] if Claude used the old marker
-  message = message.replace(/\[OFFER_BREATH\]\s*$/, '').trim();
+  message = sanitizeVelaText(message);
 
-  return { message, signal, offerBreath };
+  if (signal === 'explicit_signal' || signal === 'gentle_forced_exit') {
+    offerHold = true;
+  }
+
+  return { message, signal, offerHold };
 }
 
 export async function POST(req: NextRequest) {
@@ -53,7 +61,7 @@ export async function POST(req: NextRequest) {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 600,
-      system: VELA_SYSTEM_PROMPT,
+      system: VELA_DIR2_SYSTEM_PROMPT,
       messages,
     });
 

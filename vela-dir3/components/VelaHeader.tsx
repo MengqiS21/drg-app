@@ -1,59 +1,42 @@
 'use client';
 
 const STROKES = [
-  'M 58 18 C 70 12 84 10 98 14 C 110 18 120 13 133 13',
-  'M 55 16 C 68 9 85 12 100 16 C 113 14 125 8 138 11',
-  'M 60 20 C 72 14 88 11 103 15 C 115 19 127 12 140 14',
-  'M 56 17 C 69 10 86 13 101 17 C 114 15 126 9 139 12',
-  'M 62 19 C 74 13 90 10 105 14 C 117 18 129 11 142 13',
+  'M 8 28 C 45 14 95 8 140 18 C 175 24 210 12 248 20',
+  'M 6 26 C 42 12 98 10 145 20 C 178 26 215 14 252 22',
+  'M 10 30 C 48 16 100 12 138 22 C 172 28 208 16 250 24',
+  'M 7 27 C 44 13 92 9 142 19 C 176 25 212 13 254 21',
+  'M 9 29 C 46 15 96 11 136 21 C 170 27 206 15 248 23',
 ];
 
 interface VelaHeaderProps {
   strokeIndex?: number;
-  size?: 'default' | 'sidebar';
 }
 
-export default function VelaHeader({ strokeIndex = 0, size = 'default' }: VelaHeaderProps) {
+export default function VelaHeader({ strokeIndex = 0 }: VelaHeaderProps) {
   const stroke = STROKES[strokeIndex % STROKES.length];
-  const isSidebar = size === 'sidebar';
-  const uid = `d3vg-${strokeIndex}-${isSidebar ? 's' : 'd'}`;
+  const uid = `d3-aurora-${strokeIndex}`;
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      {/* CSS-animated aurora stroke — Dir3 palette: rose/purple base */}
-      <svg
-        width="180" height="36" viewBox="0 0 180 36"
-        className="aurora-stroke"
-        style={{ position: 'absolute', top: -8, left: -10, pointerEvents: 'none' }}
-      >
+    <header className="vela-brand-bar vela-brand-bar-dark">
+      <svg className="vela-brand-aurora" viewBox="0 0 260 48" preserveAspectRatio="none" aria-hidden>
         <defs>
           <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="rgba(188,140,200,0)" />
-            <stop offset="25%"  stopColor="rgba(188,140,200,0.72)" />
-            <stop offset="65%"  stopColor="rgba(130,165,120,0.6)" />
+            <stop offset="0%" stopColor="rgba(188,140,200,0)" />
+            <stop offset="25%" stopColor="rgba(188,140,200,0.65)" />
+            <stop offset="55%" stopColor="rgba(130,165,120,0.55)" />
+            <stop offset="100%" stopColor="rgba(188,140,200,0)" />
+          </linearGradient>
+          <linearGradient id={`${uid}-glow`} x1="0%" y1="50%" x2="100%" y2="50%">
+            <stop offset="0%" stopColor="rgba(188,140,200,0)" />
+            <stop offset="50%" stopColor="rgba(188,140,200,0.14)" />
             <stop offset="100%" stopColor="rgba(188,140,200,0)" />
           </linearGradient>
         </defs>
-        <path
-          d={stroke}
-          stroke={`url(#${uid})`}
-          strokeWidth={isSidebar ? '2.8' : '2.4'}
-          fill="none"
-          strokeLinecap="round"
-        />
+        <rect x="0" y="0" width="260" height="48" fill={`url(#${uid}-glow)`} />
+        <path d={stroke} stroke={`url(#${uid})`} strokeWidth="3" fill="none" strokeLinecap="round" className="aurora-stroke-path" />
+        <path d={stroke} stroke={`url(#${uid})`} strokeWidth="8" fill="none" strokeLinecap="round" opacity="0.3" className="aurora-stroke-glow" />
       </svg>
-
-      <h1 style={{
-        fontFamily: 'var(--font-nunito), sans-serif',
-        fontSize: isSidebar ? 26 : 22,
-        fontWeight: 600,
-        color: 'var(--text-primary)',
-        letterSpacing: '-0.01em',
-        position: 'relative',
-        zIndex: 1,
-      }}>
-        vela
-      </h1>
-    </div>
+      <h1 className="vela-brand-title vela-brand-title-dark">Vela</h1>
+    </header>
   );
 }

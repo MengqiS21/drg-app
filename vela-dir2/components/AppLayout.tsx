@@ -10,7 +10,6 @@ const SIDEBAR_DEFAULT = 280;
 export default function AppLayout() {
   const [strokeIndex] = useState(() => getStrokeIndex());
   const [tonightNote, setTonightNote] = useState('');
-  const [triggerEnd, setTriggerEnd] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
@@ -47,63 +46,26 @@ export default function AppLayout() {
   }, [handleMouseMove, handleMouseUp]);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100%', background: 'var(--warm-white)', overflow: 'hidden' }}>
-      {/* Sidebar with dynamic width */}
+    <div className="app-shell">
       <div style={{ width: sidebarWidth, flexShrink: 0, position: 'relative' }}>
-        <Sidebar
-          strokeIndex={strokeIndex}
-          onEndSession={() => setTriggerEnd(true)}
-          tonightNote={tonightNote}
-        />
+        <Sidebar strokeIndex={strokeIndex} tonightNote={tonightNote} />
 
-        {/* Drag handle */}
         <div
           onMouseDown={handleDragStart}
-          style={{
-            position: 'absolute',
-            top: 0, right: -4,
-            width: 8, height: '100%',
-            cursor: 'col-resize',
-            zIndex: 10,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{
-            width: 2,
-            height: 40,
-            borderRadius: 1,
-            background: 'var(--warm-stone)',
-            opacity: 0.4,
-            transition: 'opacity 0.2s',
-          }} />
-        </div>
+          className="sidebar-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+        />
       </div>
 
-      {/* Chat column */}
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        minWidth: 0, borderLeft: '1px solid var(--warm-tan)', position: 'relative',
-      }}>
-        <div style={{
-          padding: '20px 28px 14px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          borderBottom: '1px solid var(--warm-tan)', flexShrink: 0,
-        }}>
-          <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 13, color: 'var(--text-muted)' }}>
+      <div className="chat-column">
+        <div className="chat-column-header">
+          <p className="chat-column-date">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-          <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
-            always here
           </p>
         </div>
 
-        <ChatScreen
-          onTonightNoteChange={setTonightNote}
-          triggerEndSession={triggerEnd}
-          onEndSessionHandled={() => setTriggerEnd(false)}
-        />
+        <ChatScreen onTonightNoteChange={setTonightNote} />
       </div>
     </div>
   );

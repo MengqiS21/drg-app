@@ -5,11 +5,9 @@ import { loadMemory, setUserName, formatSince, formatSessionDate, type VelaMemor
 
 interface SidebarProps {
   strokeIndex: number;
-  onEndSession: () => void;
-  tonightNote: string;
 }
 
-export default function Sidebar({ strokeIndex, onEndSession, tonightNote }: SidebarProps) {
+export default function Sidebar({ strokeIndex }: SidebarProps) {
   const [memory, setMemory] = useState<VelaMemory>({ userName: '', since: '', sessions: [] });
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -30,140 +28,74 @@ export default function Sidebar({ strokeIndex, onEndSession, tonightNote }: Side
   }
 
   return (
-    <aside style={{
-      width: '100%',
-      height: '100vh',
-      background: 'var(--sidebar-bg)',
-      borderRight: '1px solid var(--sidebar-border)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
-      {/* Vela name with aurora stroke */}
-      <div style={{ padding: '32px 24px 20px' }}>
-        <VelaHeader strokeIndex={strokeIndex} size="sidebar" />
-        <p style={{
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.06em',
-          marginTop: 4,
-        }}>
-          · moving at your pace ·
-        </p>
-      </div>
+    <aside className="sidebar-panel sidebar-panel-dark">
+      <VelaHeader strokeIndex={strokeIndex} />
+      <p className="sidebar-tagline-dark">moving at your pace</p>
+
       <div className="divider-gradient" />
 
-      {/* Profile */}
-      <div style={{ padding: '20px 24px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(188,140,200,0.2), rgba(130,165,120,0.15))',
-            border: '1px solid rgba(188,140,200,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 16, color: 'var(--rose)', fontFamily: 'var(--font-nunito)' }}>
-              {memory.userName ? memory.userName[0].toUpperCase() : '·'}
-            </span>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {editingName ? (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input autoFocus value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleNameSave()}
-                  placeholder="your name"
-                  style={{
-                    fontFamily: 'var(--font-nunito), sans-serif', fontSize: 14,
-                    color: 'var(--text-primary)', background: 'transparent',
-                    border: 'none', borderBottom: '1px solid rgba(188,140,200,0.3)',
-                    outline: 'none', width: '100%', padding: '2px 0',
-                  }}
-                />
-                <button onClick={handleNameSave} style={{
-                  fontSize: 11, color: 'var(--rose-dim)', background: 'none',
-                  border: 'none', cursor: 'pointer', fontFamily: 'var(--font-nunito)', flexShrink: 0,
-                }}>save</button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  fontFamily: 'var(--font-nunito), sans-serif', fontSize: 14, fontWeight: 600,
-                  color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{memory.userName}</span>
-                <button onClick={() => { setNameInput(memory.userName); setEditingName(true); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)', fontSize: 10 }}>✎</button>
-              </div>
-            )}
-            {memory.since && (
-              <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                with Vela since {formatSince(memory.since)}
-              </p>
-            )}
-          </div>
+      <div className="sidebar-profile">
+        <div className="sidebar-avatar sidebar-avatar-dark">
+          <span>{memory.userName ? memory.userName[0].toUpperCase() : '·'}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {editingName ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleNameSave()}
+                placeholder="your name"
+                className="sidebar-name-input sidebar-name-input-dark"
+              />
+              <button type="button" onClick={handleNameSave} className="sidebar-name-save sidebar-name-save-dark">
+                save
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="sidebar-display-name">{memory.userName || 'Guest'}</span>
+              <button
+                type="button"
+                onClick={() => { setNameInput(memory.userName); setEditingName(true); }}
+                className="sidebar-edit-name"
+                aria-label="Edit name"
+              >
+                ✎
+              </button>
+            </div>
+          )}
+          {memory.since && (
+            <p className="sidebar-since">with Vela since {formatSince(memory.since)}</p>
+          )}
         </div>
       </div>
 
       <div className="divider-gradient" />
 
-      {/* Past sessions */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }} className="chat-scroll">
-        <p style={{
-          fontFamily: 'var(--font-nunito), sans-serif', fontSize: 10, color: 'var(--text-muted)',
-          letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10,
-        }}>past sessions</p>
-
+      <div className="sidebar-sessions chat-scroll">
+        <p className="sidebar-section-label">past sessions</p>
         {memory.sessions.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>
-            what you share will be held here
-          </p>
+          <p className="sidebar-empty">Sessions will appear here.</p>
         ) : (
           memory.sessions.map(session => (
-            <div key={session.id}
+            <button
+              key={session.id}
+              type="button"
               onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
-              style={{
-                marginBottom: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 10,
-                padding: '10px 12px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.07)',
-              }}
+              className="sidebar-session-card sidebar-session-card-dark"
             >
-              <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 10, color: 'var(--rose-dim)', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 4 }}>
-                {formatSessionDate(session.date)}
-              </p>
-              <p style={{
-                fontFamily: 'var(--font-nunito), sans-serif', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5,
-                overflow: 'hidden', display: '-webkit-box',
-                WebkitLineClamp: expandedId === session.id ? undefined : 2,
-                WebkitBoxOrient: 'vertical' as const,
-              }}>
+              <p className="sidebar-session-date sidebar-session-date-dark">{formatSessionDate(session.date)}</p>
+              <p
+                className="sidebar-session-note"
+                style={{ WebkitLineClamp: expandedId === session.id ? undefined : 3 }}
+              >
                 {session.note}
               </p>
-            </div>
+            </button>
           ))
         )}
-      </div>
-
-      <div className="divider-gradient" />
-
-      {/* Tonight */}
-      <div style={{ padding: '14px 24px 24px' }}>
-        <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-          tonight
-        </p>
-        <p style={{ fontFamily: 'var(--font-nunito), sans-serif', fontSize: 12, color: tonightNote ? 'var(--text-secondary)' : 'var(--text-muted)', lineHeight: 1.6, fontStyle: tonightNote ? 'italic' : 'normal' }}>
-          {tonightNote || '—'}
-        </p>
-        <button onClick={onEndSession} style={{
-          marginTop: 14, width: '100%', padding: '9px 0', borderRadius: 20,
-          background: 'transparent', border: '1px solid rgba(188,140,200,0.25)',
-          color: 'var(--rose-dim)', fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 12, fontWeight: 600, cursor: 'pointer', letterSpacing: '0.02em', transition: 'background 0.2s',
-        }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(188,140,200,0.08)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-        >
-          end session
-        </button>
       </div>
     </aside>
   );

@@ -7,19 +7,18 @@ interface WriteItDownProps {
   onContinue: () => void;
 }
 
-export default function WriteItDown({ summary, onApprove, onContinue }: WriteItDownProps) {
+export default function WriteItDown({ summary, onApprove }: WriteItDownProps) {
   const [text, setText] = useState(summary);
   const [approved, setApproved] = useState(false);
 
   function handleApprove() {
+    if (approved) return;
     setApproved(true);
-    onApprove(text);
-    setTimeout(() => onContinue(), 1200);
+    onApprove(text.trim());
   }
 
   return (
     <div className="write-screen">
-      {/* Header */}
       <div style={{ marginBottom: 8 }}>
         <p style={{
           fontFamily: 'var(--font-nunito), sans-serif',
@@ -29,7 +28,7 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
           textTransform: 'lowercase',
           marginBottom: 6,
         }}>
-          vela has summarized this for you
+          vela summarized this for you
         </p>
         <h2 style={{
           fontFamily: 'var(--font-nunito), sans-serif',
@@ -38,20 +37,18 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
           color: 'var(--text-primary)',
           lineHeight: 1.3,
         }}>
-          Here&rsquo;s what I&rsquo;d hold from tonight.
+          Here is what I would hold from tonight.
         </h2>
       </div>
 
       <div className="divider-gradient" style={{ margin: '16px 0' }} />
 
-      {/* Editable text box */}
       <div style={{
         flex: 1,
         background: 'var(--warm-cream)',
         borderRadius: 12,
         border: '1px solid var(--warm-tan)',
         padding: '16px',
-        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
       }}>
@@ -72,7 +69,6 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
             minHeight: 180,
           }}
         />
-        {/* Edit hint pill */}
         <div style={{
           alignSelf: 'flex-end',
           display: 'flex',
@@ -85,32 +81,19 @@ export default function WriteItDown({ summary, onApprove, onContinue }: WriteItD
           marginTop: 8,
         }}>
           <span style={{ fontSize: 11, color: 'var(--sage)', fontFamily: 'var(--font-nunito), sans-serif', fontWeight: 500 }}>
-            ✎ edit
+            edit
           </span>
         </div>
       </div>
 
-      {/* Approve button */}
       <button
+        type="button"
         onClick={handleApprove}
-        disabled={approved}
-        style={{
-          marginTop: 24,
-          width: '100%',
-          height: 48,
-          borderRadius: 24,
-          background: approved ? 'var(--sage-light)' : 'var(--sage)',
-          color: '#fff',
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 15,
-          fontWeight: 600,
-          border: 'none',
-          cursor: approved ? 'default' : 'pointer',
-          transition: 'background 0.3s',
-          letterSpacing: '0.01em',
-        }}
+        disabled={approved || !text.trim()}
+        className="hold-cta-btn"
+        style={{ marginTop: 24, width: '100%' }}
       >
-        {approved ? 'saved' : 'approve and leave'}
+        {approved ? 'Saved' : 'Approve and leave'}
       </button>
     </div>
   );
