@@ -52,7 +52,11 @@ export default function AppLayout() {
   return (
     <div className="app-shell">
       <div style={{ width: sidebarWidth, flexShrink: 0, position: 'relative' }}>
-        <Sidebar strokeIndex={strokeIndex} tonightNote={tonightNote} />
+        <Sidebar
+          strokeIndex={strokeIndex}
+          tonightNote={tonightNote}
+          onClearTonightNote={() => setTonightNote('')}
+        />
 
         <div
           onMouseDown={handleDragStart}

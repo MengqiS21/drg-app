@@ -73,3 +73,18 @@ export function formatSessionDate(isoDate: string): string {
   if (diff === 1) return 'yesterday';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+/** Same local calendar day as the reference time (default: now). */
+export function isSessionTonight(isoDate: string, ref: Date = new Date()): boolean {
+  const d = new Date(isoDate);
+  return (
+    d.getFullYear() === ref.getFullYear() &&
+    d.getMonth() === ref.getMonth() &&
+    d.getDate() === ref.getDate()
+  );
+}
+
+/** Newest session held today, if any (sessions are stored newest-first). */
+export function getTonightSession(sessions: Session[]): Session | undefined {
+  return sessions.find(s => isSessionTonight(s.date));
+}

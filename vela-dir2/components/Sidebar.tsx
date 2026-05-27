@@ -8,6 +8,8 @@ import {
   deleteSession,
   formatSince,
   formatSessionDate,
+  getTonightSession,
+  isSessionTonight,
   type VelaMemory,
   type Session,
 } from '@/lib/memory';
@@ -15,9 +17,10 @@ import {
 interface SidebarProps {
   strokeIndex: number;
   tonightNote: string;
+  onClearTonightNote?: () => void;
 }
 
-export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
+export default function Sidebar({ strokeIndex, tonightNote, onClearTonightNote }: SidebarProps) {
   const [memory, setMemory] = useState<VelaMemory>({ userName: '', since: '', sessions: [] });
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -46,13 +49,20 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
   }
 
   function handleDeleteSession(id: string) {
+    const removed = memory.sessions.find(s => s.id === id);
     deleteSession(id);
     refreshMemory();
     if (expandedId === id) setExpandedId(null);
+    if (removed && isSessionTonight(removed.date)) {
+      onClearTonightNote?.();
+    }
   }
 
   const latest: Session | undefined = memory.sessions[0];
   const older: Session[] = memory.sessions.slice(1);
+  const tonightSession = getTonightSession(memory.sessions);
+  const tonightDisplay = tonightNote.trim() || tonightSession?.note || '';
+  const tonightType = tonightSession?.type;
 
   return (
     <aside className="sidebar-panel">
@@ -148,8 +158,11 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
 
       <div className="sidebar-tonight">
         <p className="sidebar-section-label">tonight</p>
-        {tonightNote ? (
-          <p className="sidebar-tonight-note">{tonightNote}</p>
+        {tonightDisplay ? (
+          <>
+            {tonightType && <p className="sidebar-session-type">{tonightType}</p>}
+            <p className="sidebar-tonight-note">{tonightDisplay}</p>
+          </>
         ) : (
           <p className="sidebar-tonight-empty">Nothing held yet tonight.</p>
         )}
