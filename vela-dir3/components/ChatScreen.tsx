@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import SignalMarker, { type PaceDisplaySignal } from './SignalMarker';
 import BreathOverlay from './BreathOverlay';
-import { loadMemory, buildMemoryContext } from '@/lib/memory';
+import { loadMemory, buildMemoryContext, saveSession } from '@/lib/memory';
+import { sanitizeVelaText } from '@/lib/velaPrompt';
 import type { ChatResponse } from '@/app/api/chat/route';
 
 interface Message {
@@ -13,8 +14,10 @@ interface Message {
 }
 
 const STROKE_KEY = 'vela_d3_stroke_index';
+const MIN_TYPING_MS = 550;
 
-export function getStrokeIndex(): number {
+/** Client-only: call inside useEffect so SSR/hydration stay on phase 0. */
+export function consumeStrokeIndex(): number {
   if (typeof window === 'undefined') return 0;
   const n = parseInt(localStorage.getItem(STROKE_KEY) ?? '0', 10);
   localStorage.setItem(STROKE_KEY, String((n + 1) % 5));
@@ -23,14 +26,44 @@ export function getStrokeIndex(): number {
 
 type UIState = 'chat' | 'breath';
 
-export default function ChatScreen() {
+interface ChatScreenProps {
+  onSessionsUpdated?: () => void;
+}
+
+function buildSessionSummary(messages: Message[], hadBreath: boolean): string {
+  const userLines = messages
+    .filter(m => m.role === 'user' && m.content.trim())
+    .map(m => m.content.trim());
+  const prefix = hadBreath ? 'Breath pause · ' : '';
+  if (userLines.length === 0) return `${prefix}A quiet moment with Vela.`;
+  const last = userLines[userLines.length - 1];
+  if (userLines.length >= 2) {
+    const prev = userLines[userLines.length - 2];
+    const combined = `${prefix}${prev} · ${last}`;
+    return combined.length > 160 ? `${combined.slice(0, 157)}...` : combined;
+  }
+  const line = `${prefix}${last}`;
+  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
+}
+
+export default function ChatScreen({ onSessionsUpdated }: ChatScreenProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [uiState, setUiState] = useState<UIState>('chat');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const breathShownRef = useRef(false);
+  const messagesRef = useRef<Message[]>([]);
+  const breathPendingRef = useRef(false);
+
+  messagesRef.current = messages;
+
+  const scrollChatToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
 
   useEffect(() => {
     const memory = loadMemory();
@@ -42,8 +75,12 @@ export default function ChatScreen() {
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, loading, uiState]);
+    scrollChatToBottom();
+  }, [messages, loading, uiState, scrollChatToBottom]);
+
+  useEffect(() => {
+    if (loading && uiState === 'chat') scrollChatToBottom();
+  }, [loading, uiState, scrollChatToBottom]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -52,12 +89,17 @@ export default function ChatScreen() {
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput('');
+    const typingStartedAt = Date.now();
     setLoading(true);
+    scrollChatToBottom();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
       const memory = loadMemory();
-      const history = nextMessages.filter(m => m.id !== 'opening').map(m => ({ role: m.role, content: m.content }));
+      const history = nextMessages.filter(m => m.id !== 'opening' && m.id !== 'after-breath').map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,8 +107,15 @@ export default function ChatScreen() {
       });
       const data: ChatResponse = await res.json();
 
+      const typingElapsed = Date.now() - typingStartedAt;
+      if (typingElapsed < MIN_TYPING_MS) {
+        await new Promise(resolve => setTimeout(resolve, MIN_TYPING_MS - typingElapsed));
+      }
+
       const signal =
         data.signal !== 'none' ? (data.signal as PaceDisplaySignal) : undefined;
+
+      const cleanMessage = sanitizeVelaText(data.message);
 
       setMessages(prev => {
         const updated = prev.map(m =>
@@ -77,13 +126,13 @@ export default function ChatScreen() {
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: data.message,
+            content: cleanMessage,
           },
         ];
       });
 
-      if (data.triggerBreath && !breathShownRef.current) {
-        breathShownRef.current = true;
+      if (data.triggerBreath) {
+        breathPendingRef.current = true;
         setTimeout(() => setUiState('breath'), 600);
       }
     } catch {
@@ -94,7 +143,7 @@ export default function ChatScreen() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, uiState]);
+  }, [input, loading, messages, uiState, scrollChatToBottom]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -109,25 +158,45 @@ export default function ChatScreen() {
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   }
 
-  function handleBreathClose() {
+  const handleBreathComplete = useCallback(() => {
+    const hadBreath = breathPendingRef.current;
+    breathPendingRef.current = false;
+
+    const summary = buildSessionSummary(messagesRef.current, hadBreath);
+    saveSession(summary);
+    onSessionsUpdated?.();
+
     setUiState('chat');
     setMessages(prev => {
-      const hasReturn = prev.some(m => m.id === 'after-breath');
-      if (hasReturn) return prev;
+      const breathId = 'breath-session';
+      const withBreath =
+        hadBreath && !prev.some(m => m.id === breathId)
+          ? [
+              ...prev,
+              {
+                id: breathId,
+                role: 'assistant' as const,
+                content: '· a moment of breath · We paused together for a few breaths.',
+              },
+            ]
+          : prev;
+
+      const hasReturn = withBreath.some(m => m.id === 'after-breath');
+      if (hasReturn) return withBreath;
       return [
-        ...prev,
+        ...withBreath,
         {
           id: 'after-breath',
-          role: 'assistant',
-          content: "Whenever you are ready, we can continue.",
+          role: 'assistant' as const,
+          content: 'Whenever you are ready, we can continue.',
         },
       ];
     });
-  }
+  }, [onSessionsUpdated]);
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-      <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, padding: '32px 0 8px' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, minHeight: 0, padding: '32px 0 8px' }}>
         {messages.map(msg => (
           <div key={msg.id}>
             <div
@@ -148,9 +217,18 @@ export default function ChatScreen() {
         ))}
 
         {loading && uiState === 'chat' && (
-          <div style={{ display: 'flex', padding: '8px 28px' }}>
-            <div className="bubble-vela" style={{ display: 'flex', gap: 5, padding: '12px 16px', alignItems: 'center' }}>
-              <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+          <div className="chat-typing-row fade-in" aria-live="polite">
+            <div
+              className="fade-in"
+              style={{ display: 'flex', justifyContent: 'flex-start', padding: '4px 28px' }}
+            >
+              <div className="bubble-vela typing-bubble">
+                <span className="typing-indicator">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -174,7 +252,7 @@ export default function ChatScreen() {
         </button>
       </div>
 
-      {uiState === 'breath' && <BreathOverlay onClose={handleBreathClose} />}
+      {uiState === 'breath' && <BreathOverlay onComplete={handleBreathComplete} />}
     </div>
   );
 }

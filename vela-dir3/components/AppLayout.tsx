@@ -1,14 +1,15 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
-import ChatScreen, { getStrokeIndex } from './ChatScreen';
+import ChatScreen, { consumeStrokeIndex } from './ChatScreen';
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 280;
 
 export default function AppLayout() {
-  const [strokeIndex] = useState(() => getStrokeIndex());
+  const [strokeIndex, setStrokeIndex] = useState(0);
+  const [sessionTick, setSessionTick] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
@@ -44,10 +45,14 @@ export default function AppLayout() {
     window.removeEventListener('mouseup', handleMouseUp);
   }, [handleMouseMove, handleMouseUp]);
 
+  useEffect(() => {
+    setStrokeIndex(consumeStrokeIndex());
+  }, []);
+
   return (
     <div className="app-shell app-shell-dark">
       <div style={{ width: sidebarWidth, flexShrink: 0, position: 'relative' }}>
-        <Sidebar strokeIndex={strokeIndex} />
+        <Sidebar strokeIndex={strokeIndex} sessionTick={sessionTick} />
         <div onMouseDown={handleDragStart} className="sidebar-resize-handle" role="separator" aria-orientation="vertical" />
       </div>
 
@@ -58,7 +63,9 @@ export default function AppLayout() {
           </p>
           <p className="chat-column-tagline">moving at your pace</p>
         </div>
-        <ChatScreen />
+        <div className="chat-column-main">
+          <ChatScreen onSessionsUpdated={() => setSessionTick(t => t + 1)} />
+        </div>
       </div>
     </div>
   );

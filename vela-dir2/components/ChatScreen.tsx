@@ -18,8 +18,10 @@ export interface Message {
 }
 
 const STROKE_KEY = 'vela_stroke_index';
+const MIN_TYPING_MS = 550;
 
-export function getStrokeIndex(): number {
+/** Client-only: call inside useEffect so SSR/hydration stay on phase 0. */
+export function consumeStrokeIndex(): number {
   if (typeof window === 'undefined') return 0;
   const n = parseInt(localStorage.getItem(STROKE_KEY) ?? '0', 10);
   localStorage.setItem(STROKE_KEY, String((n + 1) % 5));
@@ -48,6 +50,13 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const scrollChatToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
   useEffect(() => {
     const memory = loadMemory();
     setUserNameLocal(memory.userName || '');
@@ -64,8 +73,12 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, loading, uiState]);
+    scrollChatToBottom();
+  }, [messages, loading, uiState, scrollChatToBottom]);
+
+  useEffect(() => {
+    if (loading && uiState === 'chat') scrollChatToBottom();
+  }, [loading, uiState, scrollChatToBottom]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -74,7 +87,9 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput('');
+    const typingStartedAt = Date.now();
     setLoading(true);
+    scrollChatToBottom();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
@@ -86,6 +101,11 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
         body: JSON.stringify({ history, memory: buildMemoryContext(memory) }),
       });
       const data: ChatResponse = await res.json();
+
+      const typingElapsed = Date.now() - typingStartedAt;
+      if (typingElapsed < MIN_TYPING_MS) {
+        await new Promise(resolve => setTimeout(resolve, MIN_TYPING_MS - typingElapsed));
+      }
 
       const signal = data.signal !== 'none' ? data.signal : undefined;
 
@@ -120,7 +140,7 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, uiState]);
+  }, [input, loading, messages, uiState, scrollChatToBottom]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -136,8 +156,10 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
   }
 
   function openHoldFlow() {
+    if (uiState !== 'chat') return;
     setUiState('threadSelect');
     setQuietHoldPending(false);
+    setExitMode(true);
   }
 
   async function handleThreadContinue(selectedType: string) {
@@ -210,7 +232,11 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-      <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, padding: '24px 0 8px' }}>
+      <div
+        ref={scrollRef}
+        className={`chat-scroll ${exitMode || quietHoldPending ? 'chat-scroll-hold-pad' : ''}`}
+        style={{ flex: 1, minHeight: 0, padding: '24px 0 8px' }}
+      >
 
         {showThreadCard && lastThread && (
           <div style={{ padding: '0 28px 20px' }} className="fade-in">
@@ -245,20 +271,22 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
                 } ${followsSignal ? 'chat-message-row-after-signal' : ''}`}
               >
                 <div className={msg.role === 'user' ? 'bubble-user' : 'bubble-vela'}>
-                  {msg.content}
+                  <span className="bubble-text">{msg.content}</span>
+                  {msg.role === 'assistant' && msg.offerHold && uiState === 'chat' && (
+                    <button
+                      type="button"
+                      className="hold-cta-btn hold-cta-btn--in-bubble"
+                      onClick={openHoldFlow}
+                      onPointerDown={e => e.stopPropagation()}
+                    >
+                      Leave a thread for later
+                    </button>
+                  )}
                 </div>
               </div>
 
               {msg.role === 'user' && msg.detectedSignal && (
                 <SignalMarker type={msg.detectedSignal} />
-              )}
-
-              {msg.role === 'assistant' && msg.offerHold && uiState === 'chat' && (
-                <div className="chat-hold-row fade-in">
-                  <button type="button" className="hold-cta-btn" onClick={openHoldFlow}>
-                    Leave a thread for later
-                  </button>
-                </div>
               )}
             </div>
           );
@@ -266,16 +294,27 @@ export default function ChatScreen({ strokeIndex, onTonightNoteChange }: ChatScr
 
         {quietHoldPending && !exitMode && uiState === 'chat' && (
           <div className="chat-hold-row fade-in">
-            <button type="button" className="hold-cta-btn hold-cta-quiet" onClick={openHoldFlow}>
+            <button
+              type="button"
+              className="hold-cta-btn hold-cta-quiet"
+              onClick={openHoldFlow}
+              onPointerDown={e => e.stopPropagation()}
+            >
               Leave a thread for later
             </button>
           </div>
         )}
 
         {loading && uiState === 'chat' && (
-          <div style={{ display: 'flex', padding: '8px 28px' }}>
-            <div className="bubble-vela" style={{ display: 'flex', gap: 5, padding: '12px 16px', alignItems: 'center' }}>
-              <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+          <div className="chat-typing-row fade-in" aria-live="polite" aria-label="Vela is thinking">
+            <div className="chat-message-row chat-message-row-assistant">
+              <div className="bubble-vela typing-bubble">
+                <span className="typing-indicator">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </span>
+              </div>
             </div>
           </div>
         )}

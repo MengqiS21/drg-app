@@ -12,17 +12,19 @@ export default function VelaHeader({
   showTagline = false,
 }: VelaHeaderProps) {
   const isHolding = variant === 'holding';
-  const orbPhase = strokeIndex % 5;
+  const phase = strokeIndex % 5;
 
   return (
     <header
       className={`vela-brand-bar ${isHolding ? 'vela-brand-bar-holding' : ''}`}
-      data-orb-phase={orbPhase}
+      data-aurora-phase={phase}
     >
       <div className="vela-aurora-layer" aria-hidden>
+        <div className="vela-aurora-orb vela-aurora-orb-center" />
         <div className="vela-aurora-orb vela-aurora-orb-a" />
         <div className="vela-aurora-orb vela-aurora-orb-b" />
         <div className="vela-aurora-orb vela-aurora-orb-c" />
+        <div className="vela-aurora-shimmer" />
       </div>
       <div className="vela-brand-center">
         <h1 className="vela-brand-title">Vela</h1>

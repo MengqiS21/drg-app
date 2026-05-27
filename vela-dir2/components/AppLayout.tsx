@@ -1,14 +1,14 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
-import ChatScreen, { getStrokeIndex } from './ChatScreen';
+import ChatScreen, { consumeStrokeIndex } from './ChatScreen';
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_DEFAULT = 280;
 
 export default function AppLayout() {
-  const [strokeIndex] = useState(() => getStrokeIndex());
+  const [strokeIndex, setStrokeIndex] = useState(0);
   const [tonightNote, setTonightNote] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const isDragging = useRef(false);
@@ -45,6 +45,10 @@ export default function AppLayout() {
     window.removeEventListener('mouseup', handleMouseUp);
   }, [handleMouseMove, handleMouseUp]);
 
+  useEffect(() => {
+    setStrokeIndex(consumeStrokeIndex());
+  }, []);
+
   return (
     <div className="app-shell">
       <div style={{ width: sidebarWidth, flexShrink: 0, position: 'relative' }}>
@@ -65,7 +69,9 @@ export default function AppLayout() {
           </p>
         </div>
 
-        <ChatScreen strokeIndex={strokeIndex} onTonightNoteChange={setTonightNote} />
+        <div className="chat-column-main">
+          <ChatScreen strokeIndex={strokeIndex} onTonightNoteChange={setTonightNote} />
+        </div>
       </div>
     </div>
   );

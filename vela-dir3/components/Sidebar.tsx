@@ -1,17 +1,30 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import VelaHeader from './VelaHeader';
-import { loadMemory, setUserName, formatSince, formatSessionDate, type VelaMemory } from '@/lib/memory';
+import SwipeableSessionCard from './SwipeableSessionCard';
+import {
+  loadMemory,
+  setUserName,
+  deleteSession,
+  formatSince,
+  formatSessionDate,
+  type VelaMemory,
+} from '@/lib/memory';
 
 interface SidebarProps {
   strokeIndex: number;
+  sessionTick?: number;
 }
 
-export default function Sidebar({ strokeIndex }: SidebarProps) {
+export default function Sidebar({ strokeIndex, sessionTick = 0 }: SidebarProps) {
   const [memory, setMemory] = useState<VelaMemory>({ userName: '', since: '', sessions: [] });
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const refreshMemory = useCallback(() => {
+    setMemory(loadMemory());
+  }, []);
 
   useEffect(() => {
     const m = loadMemory();
@@ -20,6 +33,10 @@ export default function Sidebar({ strokeIndex }: SidebarProps) {
     else setNameInput(m.userName);
   }, []);
 
+  useEffect(() => {
+    refreshMemory();
+  }, [sessionTick, refreshMemory]);
+
   function handleNameSave() {
     if (!nameInput.trim()) return;
     setUserName(nameInput.trim());
@@ -27,12 +44,29 @@ export default function Sidebar({ strokeIndex }: SidebarProps) {
     setEditingName(false);
   }
 
+  function handleDeleteSession(id: string) {
+    deleteSession(id);
+    refreshMemory();
+    if (expandedId === id) setExpandedId(null);
+  }
+
+  const latest = memory.sessions[0];
+  const older = memory.sessions.slice(1);
+
   return (
     <aside className="sidebar-panel sidebar-panel-dark">
-      <VelaHeader strokeIndex={strokeIndex} />
-      <p className="sidebar-tagline-dark">moving at your pace</p>
-
-      <div className="divider-gradient" />
+      <div className="sidebar-aurora-zone" data-aurora-phase={strokeIndex % 5}>
+        <div className="vela-aurora-layer" aria-hidden>
+          <div className="vela-aurora-orb vela-aurora-orb-center" />
+          <div className="vela-aurora-orb vela-aurora-orb-a" />
+          <div className="vela-aurora-orb vela-aurora-orb-b" />
+          <div className="vela-aurora-orb vela-aurora-orb-c" />
+          <div className="vela-aurora-shimmer" />
+        </div>
+        <VelaHeader strokeIndex={strokeIndex} />
+        <p className="sidebar-tagline-dark">moving at your pace</p>
+        <div className="sidebar-aurora-divider" aria-hidden />
+      </div>
 
       <div className="sidebar-profile">
         <div className="sidebar-avatar sidebar-avatar-dark">
@@ -75,26 +109,42 @@ export default function Sidebar({ strokeIndex }: SidebarProps) {
       <div className="divider-gradient" />
 
       <div className="sidebar-sessions chat-scroll">
-        <p className="sidebar-section-label">past sessions</p>
+        <p className="sidebar-section-label">session summaries</p>
         {memory.sessions.length === 0 ? (
-          <p className="sidebar-empty">Sessions will appear here.</p>
+          <p className="sidebar-empty">After a breath pause, a short summary of your chat appears here.</p>
         ) : (
-          memory.sessions.map(session => (
-            <button
-              key={session.id}
-              type="button"
-              onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
-              className="sidebar-session-card sidebar-session-card-dark"
-            >
-              <p className="sidebar-session-date sidebar-session-date-dark">{formatSessionDate(session.date)}</p>
-              <p
-                className="sidebar-session-note"
-                style={{ WebkitLineClamp: expandedId === session.id ? undefined : 3 }}
+          <>
+            {latest && (
+              <button
+                type="button"
+                onClick={() => setExpandedId(expandedId === latest.id ? null : latest.id)}
+                className="sidebar-session-card sidebar-session-card-dark sidebar-session-latest"
               >
-                {session.note}
-              </p>
-            </button>
-          ))
+                <p className="sidebar-session-badge">most recent</p>
+                <p className="sidebar-session-date sidebar-session-date-dark">{formatSessionDate(latest.date)}</p>
+                <p
+                  className="sidebar-session-note"
+                  style={{ WebkitLineClamp: expandedId === latest.id ? undefined : 3 }}
+                >
+                  {latest.note}
+                </p>
+              </button>
+            )}
+
+            {older.length > 0 && <p className="sidebar-older-label">earlier</p>}
+
+            {older.map(session => (
+              <SwipeableSessionCard
+                key={session.id}
+                session={session}
+                expanded={expandedId === session.id}
+                onToggleExpand={() =>
+                  setExpandedId(expandedId === session.id ? null : session.id)
+                }
+                onDelete={handleDeleteSession}
+              />
+            ))}
+          </>
         )}
       </div>
     </aside>

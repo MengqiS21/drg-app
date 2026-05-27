@@ -1,88 +1,113 @@
 'use client';
-import AuroraBackground from './AuroraBackground';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  BREATH_ENTER_MS,
+  BREATH_EXIT_MS,
+  BREATH_HOLD_MS,
+  BREATH_CYCLE_MS,
+  BREATH_MOMENT_LABELS,
+  BREATH_HOLD_CUES,
+  BREATH_ENTER_SUBLINE,
+  BREATH_EXIT_SUBLINE,
+} from '@/lib/breathConfig';
+
+type BreathPhase = 'enter' | 'hold' | 'exit';
 
 interface BreathOverlayProps {
-  onClose: () => void;
+  onComplete: () => void;
 }
 
-export default function BreathOverlay({ onClose }: BreathOverlayProps) {
-  return (
+export default function BreathOverlay({ onComplete }: BreathOverlayProps) {
+  const [mounted, setMounted] = useState(false);
+  const [phase, setPhase] = useState<BreathPhase>('enter');
+  const [cycle, setCycle] = useState(0);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.body.classList.add('breath-active');
+    return () => document.body.classList.remove('breath-active');
+  }, [mounted]);
+
+  useEffect(() => {
+    const t1 = window.setTimeout(() => setPhase('hold'), BREATH_ENTER_MS);
+    const t2 = window.setTimeout(() => setPhase('exit'), BREATH_ENTER_MS + BREATH_HOLD_MS);
+    const t3 = window.setTimeout(
+      () => onComplete(),
+      BREATH_ENTER_MS + BREATH_HOLD_MS + BREATH_EXIT_MS
+    );
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (phase !== 'hold') return;
+    const id = window.setInterval(() => setCycle(c => c + 1), BREATH_CYCLE_MS);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  const momentLabel =
+    phase === 'enter'
+      ? BREATH_MOMENT_LABELS[0]
+      : phase === 'exit'
+        ? BREATH_MOMENT_LABELS[0]
+        : BREATH_MOMENT_LABELS[Math.floor(cycle / 2) % BREATH_MOMENT_LABELS.length];
+
+  const subline =
+    phase === 'enter'
+      ? BREATH_ENTER_SUBLINE
+      : phase === 'exit'
+        ? BREATH_EXIT_SUBLINE
+        : BREATH_HOLD_CUES[cycle % BREATH_HOLD_CUES.length];
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      onClick={onClose}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'var(--bg-dark)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50,
-        gap: 20,
-        cursor: 'pointer',
-      }}
+      className={`breath-overlay breath-overlay--${phase}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Breath space"
+      aria-live="polite"
     >
-      {/* Aurora blobs fill the entire screen */}
-      <AuroraBackground />
-
-      {/* Content above aurora */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-        <p style={{
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 15,
-          letterSpacing: '0.1em',
-          color: 'rgba(232,228,220,0.55)',
-          textTransform: 'lowercase',
-          fontWeight: 300,
-        }}>
-          take a breath with me
-        </p>
-
-        {/* Animated gradient wave */}
-        <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
-          <defs>
-            <linearGradient id="breathWave" x1="0" y1="0" x2="200" y2="0" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="rgba(188,140,200,0)">
-                <animate attributeName="stop-color"
-                  values="rgba(188,140,200,0);rgba(188,140,200,0);rgba(188,140,200,0)"
-                  dur="5s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="30%" stopColor="rgba(188,140,200,0.5)">
-                <animate attributeName="stop-color"
-                  values="rgba(188,140,200,0.5);rgba(130,165,120,0.5);rgba(200,160,100,0.45);rgba(188,140,200,0.5)"
-                  dur="5s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="65%" stopColor="rgba(130,165,120,0.45)">
-                <animate attributeName="stop-color"
-                  values="rgba(130,165,120,0.45);rgba(200,160,100,0.4);rgba(188,140,200,0.45);rgba(130,165,120,0.45)"
-                  dur="5s" begin="1.5s" repeatCount="indefinite" />
-              </stop>
-              <stop offset="100%" stopColor="rgba(188,140,200,0)" />
-            </linearGradient>
-            <filter id="waveGlow">
-              <feGaussianBlur stdDeviation="2" />
-            </filter>
-          </defs>
-          {/* Ribbon wave path */}
-          <path
-            d="M 0 2 C 30 -2 60 6 90 2 C 120 -2 150 6 180 2 L 180 6 C 150 10 120 2 90 6 C 60 10 30 2 0 6 Z"
-            fill="url(#breathWave)"
-            filter="url(#waveGlow)"
-            transform="translate(10, 10)"
-          />
-        </svg>
-
-        <p style={{
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 11,
-          color: 'rgba(232,228,220,0.22)',
-          fontWeight: 300,
-          letterSpacing: '0.04em',
-          marginTop: 4,
-        }}>
-          tap anywhere to continue
-        </p>
+      <div className="breath-space-aurora" aria-hidden>
+        <div className="breath-orb breath-orb-rose" />
+        <div className="breath-orb breath-orb-sage" />
+        <div className="breath-orb breath-orb-gold" />
+        <div className="breath-orb breath-orb-lavender" />
+        <div className="breath-orb breath-orb-coral" />
+        <div className="breath-orb breath-orb-teal" />
+        <div className="breath-orb breath-orb-violet" />
+        <div className="breath-orb breath-orb-sky" />
+        <div className="breath-orb breath-orb-magenta" />
+        <div className="breath-orb breath-orb-amber" />
+        <div className="breath-orb breath-orb-mint" />
       </div>
-    </div>
+
+      <div className="breath-space-content">
+        <header className="breath-space-header">
+          <h1 className="breath-space-title">Vela</h1>
+          <p className="breath-space-tagline">moving at your pace</p>
+        </header>
+
+        <div className="breath-space-center">
+          <p key={`label-${momentLabel}-${phase}`} className="breath-moment-label breath-line-fade">
+            {momentLabel}
+          </p>
+          <p className="breath-invite">breathe with me</p>
+          <p key={`sub-${subline}-${phase}-${cycle}`} className="breath-cycle-cue breath-line-fade">
+            {subline}
+          </p>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

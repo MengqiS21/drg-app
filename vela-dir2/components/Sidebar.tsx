@@ -1,7 +1,16 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import VelaHeader from './VelaHeader';
-import { loadMemory, setUserName, formatSince, formatSessionDate, type VelaMemory } from '@/lib/memory';
+import SwipeableThreadCard from './SwipeableThreadCard';
+import {
+  loadMemory,
+  setUserName,
+  deleteSession,
+  formatSince,
+  formatSessionDate,
+  type VelaMemory,
+  type Session,
+} from '@/lib/memory';
 
 interface SidebarProps {
   strokeIndex: number;
@@ -14,6 +23,10 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
   const [nameInput, setNameInput] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const refreshMemory = useCallback(() => {
+    setMemory(loadMemory());
+  }, []);
+
   useEffect(() => {
     const m = loadMemory();
     setMemory(m);
@@ -21,12 +34,25 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
     else setNameInput(m.userName);
   }, []);
 
+  useEffect(() => {
+    refreshMemory();
+  }, [tonightNote, refreshMemory]);
+
   function handleNameSave() {
     if (!nameInput.trim()) return;
     setUserName(nameInput.trim());
     setMemory(prev => ({ ...prev, userName: nameInput.trim() }));
     setEditingName(false);
   }
+
+  function handleDeleteSession(id: string) {
+    deleteSession(id);
+    refreshMemory();
+    if (expandedId === id) setExpandedId(null);
+  }
+
+  const latest: Session | undefined = memory.sessions[0];
+  const older: Session[] = memory.sessions.slice(1);
 
   return (
     <aside className="sidebar-panel">
@@ -80,27 +106,41 @@ export default function Sidebar({ strokeIndex, tonightNote }: SidebarProps) {
         {memory.sessions.length === 0 ? (
           <p className="sidebar-empty">What you share with Vela will be held here.</p>
         ) : (
-          memory.sessions.map(session => (
-            <button
-              key={session.id}
-              type="button"
-              onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
-              className="sidebar-session-card"
-            >
-              <p className="sidebar-session-date">{formatSessionDate(session.date)}</p>
-              {session.type && (
-                <p className="sidebar-session-type">{session.type}</p>
-              )}
-              <p
-                className="sidebar-session-note"
-                style={{
-                  WebkitLineClamp: expandedId === session.id ? undefined : 3,
-                }}
+          <>
+            {latest && (
+              <button
+                type="button"
+                onClick={() => setExpandedId(expandedId === latest.id ? null : latest.id)}
+                className="sidebar-session-card sidebar-session-latest"
               >
-                {session.note}
-              </p>
-            </button>
-          ))
+                <p className="sidebar-session-badge">most recent</p>
+                <p className="sidebar-session-date">{formatSessionDate(latest.date)}</p>
+                {latest.type && <p className="sidebar-session-type">{latest.type}</p>}
+                <p
+                  className="sidebar-session-note"
+                  style={{ WebkitLineClamp: expandedId === latest.id ? undefined : 3 }}
+                >
+                  {latest.note}
+                </p>
+              </button>
+            )}
+
+            {older.length > 0 && (
+              <p className="sidebar-older-label">earlier</p>
+            )}
+
+            {older.map(session => (
+              <SwipeableThreadCard
+                key={session.id}
+                session={session}
+                expanded={expandedId === session.id}
+                onToggleExpand={() =>
+                  setExpandedId(expandedId === session.id ? null : session.id)
+                }
+                onDelete={handleDeleteSession}
+              />
+            ))}
+          </>
         )}
       </div>
 

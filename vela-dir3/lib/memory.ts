@@ -10,7 +10,7 @@ export interface VelaMemory {
   sessions: Session[];
 }
 
-const MEMORY_KEY = 'vela_memory_v2';
+const MEMORY_KEY = 'vela_memory_d3';
 
 export function loadMemory(): VelaMemory {
   if (typeof window === 'undefined') return defaultMemory();
@@ -29,6 +29,13 @@ function defaultMemory(): VelaMemory {
     since: new Date().toISOString(),
     sessions: [],
   };
+}
+
+export function deleteSession(id: string): void {
+  if (typeof window === 'undefined') return;
+  const memory = loadMemory();
+  memory.sessions = memory.sessions.filter(s => s.id !== id);
+  localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
 }
 
 export function saveSession(note: string): void {

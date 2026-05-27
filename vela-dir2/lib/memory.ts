@@ -38,6 +38,13 @@ export function saveSession(note: string, type?: string): void {
   localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
 }
 
+export function deleteSession(id: string): void {
+  if (typeof window === 'undefined') return;
+  const memory = loadMemory();
+  memory.sessions = memory.sessions.filter(s => s.id !== id);
+  localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
+}
+
 export function setUserName(name: string): void {
   if (typeof window === 'undefined') return;
   const memory = loadMemory();
@@ -48,9 +55,10 @@ export function setUserName(name: string): void {
 
 export function buildMemoryContext(memory: VelaMemory): string | null {
   if (memory.sessions.length === 0) return null;
-  return memory.sessions.slice(0, 3).map(s => {
+  return memory.sessions.slice(0, 5).map(s => {
     const d = new Date(s.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    return `${d}: ${s.note}`;
+    const kind = s.type ? ` (${s.type})` : '';
+    return `${d}${kind}: ${s.note}`;
   }).join('\n');
 }
 
